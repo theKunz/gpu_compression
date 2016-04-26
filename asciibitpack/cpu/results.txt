@@ -1,0 +1,30 @@
+
+================================================================================
+Starting Test Sequence #1
+Building
+Running compression library: cpu
+================================================================================
+
+Starting test: Melville's Moby-Dick, based on the Hendricks House edition
+================================================================================
+[mobydick.txt: 1.205MB | mobydick.txt.bc: 0.904MB]
+--------------------------------------------------------------------------------
+Compresssion:
+-Time: 0.118 seconds
+-Throughput: 10.220 MB/s
+-Ratio: 0.750 %
+Decompresssion:
+-Time: 0.079 seconds
+-Throughput: 15.232 MB/s
+
+Starting test: The King James Bible: Second Version, 10th Edition
+================================================================================
+[bible10.txt: 4.947MB | bible10.txt.bc: 3.710MB]
+--------------------------------------------------------------------------------
+Compresssion:
+-Time: 0.270 seconds
+-Throughput: 18.313 MB/s
+-Ratio: 0.750 %
+Decompresssion:
+-Time: 0.295 seconds
+-Throughput: 16.774 MB/s

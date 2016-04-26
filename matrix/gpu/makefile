@@ -1,0 +1,2 @@
+all:
+	nvcc compressesRow.cu

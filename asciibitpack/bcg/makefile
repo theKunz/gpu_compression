@@ -1,0 +1,2 @@
+all:
+	nvcc basicCompressGpu.cu
