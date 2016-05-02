@@ -3,7 +3,7 @@ from datetime import datetime
 from collections import namedtuple, defaultdict
 
 timestamp = str(datetime.now()).replace(" ", "_")
-workdir = "testdir_" + timestamp
+workdir = "testdir_" + timestamp + "_steps"
 
 def setup_working_directory():
     os.mkdir(workdir)
@@ -16,8 +16,8 @@ def gen_matrices():
 	os.chdir('../')
 	for i in range(10, 101):
 		for j in range(1, 101):
-			cmdline = './genMatrix ' + str(i) + ' ' + str(i) + ' ' + str(j)
-			proc = subprocess.Popen(cmdline , stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+			cmdline = '../testfiles/genMatrix ' + str(i) + ' ' + str(i) + ' ' + str(j)
+			proc = subprocess.Popen(cmdline)
     		proc.wait()
     	print '\tGenerated ' + str(i) + ' size matrices'
 
@@ -26,50 +26,33 @@ def gen_matrices():
 			cmdline = 'mv matrix_' + str(i) + '_' + str(i)  + '_' + str(j) + ' ./' + workdir + '/originals'
 			proc = subprocess.Popen(cmdline , stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
 			proc.wait()
-	os.chdir(workdir)
 
 def compress_matrices():
-	os.chdir('compressed')
-	resultfile = open('compression_time_results.csv', 'a+')
-	executable = 'a.out'
-	for i in range(10, 51):
+	executable = 'sections.out'
+	for i in range(10, 101):
 		for j in range(1, 101):
-			cmdline = '../../../gpu/' + executable + ' -c ../originals/matrix_' + str(i) + '_' + str(i) + '_' + str(j)
-			start_time = time.time()
+			cmdline = './' + executable + ' -c ' + testdir + '/originals/matrix_' + str(i) + '_' + str(i) + '_' + str(j)
 			proc = subprocess.Popen(cmdline , stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-			proc.wait()
-
-			compression_time = time.time() - start_time
-
-			cmdline2 = 'mv ../originals/matrix_' + str(i) + '_' + str(i) + '_' + str(j) + '.crs ' + '.'
-			proc = subprocess.Popen(cmdline2 , stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
 			proc.wait()	
 
-			resultfile.write(str(compression_time) + ',')
-		resultfile.write("\n")
+			cmdline = 'mv '+ testdir + '/originals/matrix_' + str(i) + '_' + str(i) + '_' + str(j) + '.crs ' + testdir + '/compressed/'
+			proc = subprocess.Popen(cmdline , stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+			proc.wait()	
 		print '\tCompressed ' + str(i) + ' size matrices'
-	resultfile.close()
 
 def decompress_matrices():
-	os.chdir('../decompressed')
-	resultfile = open('decompression_time_results.csv', 'a+')
-	executable = 'a.out'
-	for i in range(10, 51):
+	os.chdir('../decompressed') n 
+	executable = 'sections.out'
+	for i in range(10, 101):
 		for j in range(1, 101):
-			cmdline = '../../../gpu/' + executable + ' -u ../compressed/matrix_' + str(i) + '_' + str(i) + '_' + str(j) + '.crs'
-			start_time = time.time()
-			proc = subprocess.Popen(cmdline , stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-			proc.wait()	
-			compression_time = time.time() - start_time
-
-			cmdline = 'mv ../compressed/matrix_' + str(i) + '_' + str(i) + '_' + str(j) + '.crs.out ' + '.'
+			cmdline = './' + executable + ' -c ' + testdir + '/originals/matrix_' + str(i) + '_' + str(i) + '_' + str(j)
 			proc = subprocess.Popen(cmdline , stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
 			proc.wait()	
 
-			resultfile.write(str(compression_time) + ',')
-		resultfile.write("\n")
+			cmdline = 'mv '+ testdir + '/originals/matrix_' + str(i) + '_' + str(i) + '_' + str(j) + '.crs ' + testdir + '/decompressed/'
+			proc = subprocess.Popen(cmdline , stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+			proc.wait()	
 		print '\tDecompressed ' + str(i) + ' size matrices'
-	resultfile.close()
 
 def main():
 	print ''
