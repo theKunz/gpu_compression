@@ -40,16 +40,20 @@ int main(int argc, char* argv[]) {
 			}
 		}
 	}
-	printf("NonZero to Total (~100 - sparsity) ratio: %i/%i\n", count, width * height);
+	printf("NonZero to Total ratio: %i/%i\n", count, width * height);
 	///////////////////////////////
 	char name[32];
 	sprintf(name, "matrix_%i_%i_%s", width, height, argv[3]);
-	FILE* file = fopen(name, "wb+");
+	FILE* file = fopen(name, "ab+");
 	fwrite((void*)&height, sizeof(height), 1, file);
 	fwrite((void*)&width, sizeof(width), 1, file);
 
 	for (i = 0; i < height; i++) {
-		fwrite((void*)&newMatrix[i][0], sizeof(newMatrix[i][0]), width, file);
+		for (j = 0; j < width; j++) {
+			fwrite((void*)&i, NUM_BYTES(1), 1, newfile);
+			fwrite((void*)&j, NUM_BYTES(1), 1, newfile);
+			fwrite((void*)&newMatrix[i][j], sizeof(newMatrix[i][j]), 1, file);
+		}
 	}
 
 	fclose(file);

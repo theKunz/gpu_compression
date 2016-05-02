@@ -9,7 +9,7 @@ typedef int32_t Int;
 
 #define NUM_BYTES(n) ((n) * (sizeof(Int)))
 
-__global__ void compressedRow(Int* matrix, Int* rowIndex, Int* nums, Int* cols, Int* rows, Int width) {
+__global__ void compressedRow(Int* matrix, Int* rowIndex, Int* nums, Int* cols, Int width) {
 	Int* row = ((matrix + (blockIdx.x * width)));
 	Int offset = *(rowIndex + blockIdx.x);
 
@@ -18,34 +18,25 @@ __global__ void compressedRow(Int* matrix, Int* rowIndex, Int* nums, Int* cols, 
 		if (*(row + i) != 0) {
 			*(nums + offset) = *(row + i);
 			*(cols + offset) = i;
-			*(rows + offset) = blockIdx.x;
 			offset++;
 		}
 	}
 }
 
-__global__ void decompressRow(Int* matrix, Int* nums, Int* cols, Int* rows, Int count, Int width) {
+__global__ void decompressRow(Int* matrix, Int* nums, Int* cols, Int* rows, Int width) {
 	Int* row = ((matrix + (blockIdx.x * width)));
 	Int i;
 
-	//Int offset = *(rows + blockIdx.x);
-	//Int num_in_row = *(rowIndex + blockIdx.x + 1) - *(rowIndex + blockIdx.x) //make sure row index is height + 1 to accomidate last row
-	//Int* val_offset = nums + offset;
-	//Int* col_offset = cols + offset
+	Int offset = *(rows + blockIdx.x);
+	Int num_in_row = *(rowIndex + blockIdx.x + 1) - *(rowIndex + blockIdx.x) //make sure row index is height + 1 to accomidate last row
+	Int* val_offset = nums + offset;
+	Int* col_offset = cols + offset
 
-	//*(row + threadIdx.x) = 0;
-	//for (i = 0; i < num_in_row; i++)
-	//	if (*(col_offset + i) == threadIdx.x) {
-	//		*(row + threadIdx.x) = *(val_offset + i);
-	//		break;
-	//	}
-
-	for (i = 0; i < count; i++) {
-		if (*(rows + i) == blockIdx.x) {
-			if (*(cols + i) == threadIdx.x) {
-				*(row + threadIdx.x) = *(nums + i);
-				break;
-			}
+	*(row + threadIdx.x) = 0;
+	for (i = 0; i < num_in_row; i++) {
+		if (*(col_offset + i) == threadIdx.x) {
+			*(row + threadIdx.x) = *(val_offset + i);
+			break;
 		}
 	}
 
@@ -63,7 +54,7 @@ void compress(char* infile) {
 	Int height, width;
 	Int i, j;
 	Int result;
-	Int temp;
+	Int temp, tempC, tempR;
 
 	FILE* in = fopen(infile, "r");
 
@@ -77,28 +68,34 @@ void compress(char* infile) {
 		fprintf(stderr, "Reading Error\n");
 		exit(1);
 	}
-	Int count = 0, rowCount = 0, rowIndex[height];
+	Int count = 0, rowCount = 0, rowIndex[height + 1];
+	for (i = 0; i < height + 1; i++) {
+		rowIndex[i] = 0;
+	}
 	Int* matrix = (Int*)malloc(NUM_BYTES(height * width));
 
-	for (i = 0; i < height; i++) {
-
-		if (i == 0)
-			rowIndex[i] = 0;
-		else 
-			rowIndex[i] = rowIndex[i-1] + rowCount;
-		rowCount = 0;
-
-		for (j = 0; j < width; j++) {
-			result = fread((void*)&temp, NUM_BYTES(1), 1, in);
-			*(matrix + (i * width) + j) = temp;
-			if (result != 1) {
-				fprintf(stderr, "Reading Error\n");
-				exit(1);
+	for (i = 0; i < width * height; i++) {
+		result = fread((void*)&tempR, NUM_BYTES(1), 1, in);
+		if (result != 1) {
+			fprintf(stderr, "Reading Error\n");
+			exit(1);
+		}
+		result = fread((void*)&tempC, NUM_BYTES(1), 1, in);
+		if (result != 1) {
+			fprintf(stderr, "Reading Error\n");
+			exit(1);
+		}
+		result = fread((void*)&temp, NUM_BYTES(1), 1, in);
+		if (result != 1) {
+			fprintf(stderr, "Reading Error\n");
+			exit(1);
+		}	
+		*(matrix + (tempR * width) + tempC) = temp;
+		if (temp != 0) {
+			for (j = tempR + 1, j < height + 1; j++) {
+				rowIndex[j]++;
 			}
-			if (*(matrix + (i * width) + j) != 0) {
-				count++;
-				rowCount++;
-			}
+			count++;
 		}
 	}
 	fclose(in);
@@ -106,7 +103,6 @@ void compress(char* infile) {
 	Int* cRowIndex;
 	Int* cnums;
 	Int* nums;
-	Int* cRow; 
 	Int* row;
 	Int* cCol; 
 	Int* col;
@@ -114,65 +110,47 @@ void compress(char* infile) {
 
 	cudaMalloc((void**)&cRowIndex, NUM_BYTES(height));
 	cudaMalloc((void**)&cnums, NUM_BYTES(count));
-	cudaMalloc((void**)&cRow, NUM_BYTES(count));
 	cudaMalloc((void**)&cCol, NUM_BYTES(count));
 	cudaMalloc((void**)&cMatrix, NUM_BYTES(width * height));
 
-	cudaMemcpy(cRowIndex, rowIndex, NUM_BYTES(height), cudaMemcpyHostToDevice);
+	cudaMemcpy(cRowIndex, rowIndex, NUM_BYTES(height+1), cudaMemcpyHostToDevice);
 	cudaMemcpy(cMatrix, matrix, NUM_BYTES(width * height), cudaMemcpyHostToDevice);
 
-	compressedRow<<<height, 1>>>(cMatrix, cRowIndex, cnums, cCol, cRow, width);
+	compressedRow<<<height, 1>>>(cMatrix, cRowIndex, cnums, cCol, width);
 
 	nums = (Int*)malloc(NUM_BYTES(count));
-	row = (Int*)malloc(NUM_BYTES(count));
 	col = (Int*)malloc(NUM_BYTES(count));
 
 	cudaMemcpy(nums, cnums, NUM_BYTES(count), cudaMemcpyDeviceToHost);
 	cudaMemcpy(col, cCol, NUM_BYTES(count), cudaMemcpyDeviceToHost);
-	cudaMemcpy(row, cRow, NUM_BYTES(count), cudaMemcpyDeviceToHost);
 
 	cudaFree(cRowIndex);
 	cudaFree(cnums);
-	cudaFree(cRow);
 	cudaFree(cCol);	
 	cudaFree(cMatrix);
 
 	char name[64];
 	sprintf(name, "%s.crs", infile);
-	FILE* file = fopen(name, "ab+");
+	FILE* file = fopen(name, "wb+");
 	fwrite((void*)&height, NUM_BYTES(1), 1, file);
 	fwrite((void*)&width, NUM_BYTES(1), 1, file);
-	fwrite((void*)&count, NUM_BYTES(1), 1, file);
 
+	fwrite((void*)&rowIndex[0], NUM_BYTES(1), height + 1, file);
+	fwrite((void*)&count, NUM_BYTES(1), 1, file);
 	fwrite((void*)&nums[0], NUM_BYTES(1), count, file);
-	printf("Nums: ");
-	for (i = 0; i < count; i++)
-		printf("%i, ", nums[i]);
-	printf("\n");
 	fwrite((void*)&col[0], NUM_BYTES(1), count, file);
-	printf("Cols: ");
-	for (i = 0; i < count; i++)
-		printf("%i, ", col[i]);
-	printf("\n");
-	fwrite((void*)&row[0], NUM_BYTES(1), count, file);
-	printf("Rows: ");
-	for (i = 0; i < count; i++)
-		printf("%i, ", row[i]);
-	printf("\n");
 
 	fclose(file);
 
 	free(nums);
-	free(row);
 	free(col);
 	free(matrix);
 }
 
 void uncompress(char* infile) {
 
-	Int height, width;
-	Int count = 0;
-	Int i;
+	Int height, width, count;
+	Int i, j;
 	Int result;
 	Int temp;
 
@@ -188,13 +166,18 @@ void uncompress(char* infile) {
 		fprintf(stderr, "Reading Error\n");
 		exit(1);
 	}
+	Int rowIndex[height + 1];
+	result = fread((void*)&rowIndex[0], NUM_BYTES(1), height + 1, in);
+	if (result != 1) {
+		fprintf(stderr, "Reading Error\n");
+		exit(1);
+	}
 	result = fread((void*)&count, NUM_BYTES(1), 1, in);
 	if (result != 1) {
 		fprintf(stderr, "Reading Error\n");
 		exit(1);
 	}
 	Int nums[count];
-	Int rows[count];
 	Int cols[count];
 
 	for (i = 0; i < count; i++) {
@@ -213,46 +196,44 @@ void uncompress(char* infile) {
 			exit(1);
 		}
 	}
-	for (i = 0; i < count; i++) {
-		result = fread((void*)&temp, NUM_BYTES(1), 1, in);
-		rows[i] = temp;
-		if (result != 1) {
-			fprintf(stderr, "Reading Error\n");
-			exit(1);
-		}
-	}
 	fclose(in);
 
 	Int* cNums;
-	Int* cRows;
+	Int* cRowIndex;
 	Int* cCols;
 	Int* matrix = (Int*)malloc(NUM_BYTES(height * width));
 	Int* cMatrix;
 
 	cudaMalloc((void**)&cNums, NUM_BYTES(count));
-	cudaMalloc((void**)&cRows, NUM_BYTES(count));
+	cudaMalloc((void**)&cRowIndex, NUM_BYTES(height + 1));
 	cudaMalloc((void**)&cCols, NUM_BYTES(count));
 	cudaMalloc((void**)&cMatrix, NUM_BYTES(width * height));
 
 	cudaMemcpy(cNums, nums, NUM_BYTES(count), cudaMemcpyHostToDevice);
 	cudaMemcpy(cCols, cols, NUM_BYTES(count), cudaMemcpyHostToDevice);
-	cudaMemcpy(cRows, rows, NUM_BYTES(count), cudaMemcpyHostToDevice);
+	cudaMemcpy(cRowIndex, rowIndex, NUM_BYTES(height + 1), cudaMemcpyHostToDevice);
 
-	decompressRow<<<height, width>>>(cMatrix, cNums, cCols, cRows, count, width);
+	decompressRow<<<height, width>>>(cMatrix, cNums, cCols, cRowIndex, width);
 
 	cudaMemcpy((void*)matrix, cMatrix, NUM_BYTES(width * height), cudaMemcpyDeviceToHost);
 	
 	cudaFree(cNums);
-	cudaFree(cRows);
+	cudaFree(cRowIndex);
 	cudaFree(cCols);
 	cudaFree(cMatrix);
 
 	char name[64];
 	sprintf(name, "%s.out", infile);
-	FILE* newfile = fopen(name, "ab+");
+	FILE* newfile = fopen(name, "wb+");
 	fwrite((void*)&height, NUM_BYTES(1), 1, newfile);
 	fwrite((void*)&width, NUM_BYTES(1), 1, newfile);
-	fwrite((void*)matrix, NUM_BYTES(1), width * height, newfile);
+	for (i = 0; i < height; i++) {
+		for (j = 0; j < width, j++) {
+			fwrite((void*)&i, NUM_BYTES(1), 1, newfile);
+			fwrite((void*)&j, NUM_BYTES(1), 1, newfile);
+			fwrite((void*)(matrix + (i * width) + j), NUM_BYTES(1), 1, newfile);
+		}
+	}
 
 	fclose(newfile);
 	free(matrix);
